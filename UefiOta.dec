@@ -1,0 +1,15 @@
+
+[Defines]
+  DEC_SPECIFICATION              = 0x00010005
+  PACKAGE_NAME                   = UefiOta
+  PACKAGE_GUID                   = C769AA78-83CC-4E0C-A242-18AFC6B2F341  
+  PACKAGE_VERSION                = 0.98
+
+[Includes]
+  Include
+
+[Includes.Common.Private]
+
+
+[LibraryClasses]
+  HttpDownloadLib|Include/Library/HttpDownloadLib.h

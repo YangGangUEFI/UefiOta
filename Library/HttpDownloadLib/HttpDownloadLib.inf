@@ -1,0 +1,48 @@
+##  @file
+#  Based on Shell `http` command code
+#  to provide API for user downloading file from http.
+#  SPDX-License-Identifier: BSD-2-Clause-Patent
+#
+#
+##
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = HttpDownloadLib
+  FILE_GUID                      = 8197CAF1-016C-47D3-87B9-D5BCCF9E1E9A  
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  LIBRARY_CLASS                  = HttpDownloadLib|DXE_CORE DXE_DRIVER DXE_RUNTIME_DRIVER DXE_SMM_DRIVER UEFI_APPLICATION UEFI_DRIVER
+
+#
+#  This flag specifies whether HII resource section is generated into PE image.
+#
+  UEFI_HII_RESOURCE_SECTION      = TRUE
+
+[Sources.common]
+  Http.c
+  HttpDownloadLib.c
+  Http.h
+
+[Packages]
+  MdeModulePkg/MdeModulePkg.dec
+  MdePkg/MdePkg.dec
+  NetworkPkg/NetworkPkg.dec
+
+  UefiOta/UefiOta.dec
+
+[LibraryClasses]
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  HttpLib
+  MemoryAllocationLib
+  NetLib
+  UefiBootServicesTableLib
+  UefiLib
+  UefiRuntimeServicesTableLib
+
+[Protocols]
+  gEfiHttpProtocolGuid                         ## CONSUMES
+  gEfiHttpServiceBindingProtocolGuid           ## CONSUMES
+  gEfiManagedNetworkServiceBindingProtocolGuid   ## CONSUMES
