@@ -43,11 +43,6 @@
 #define REQ_OK           0
 #define REQ_NEED_REPEAT  1
 
-//
-// Download Flags.
-//
-#define DL_FLAG_TIME      BIT0 // Show elapsed time.
-#define DL_FLAG_KEEP_BAD  BIT1 // Keep files even if download failed.
 
 typedef struct {
   UINTN                   ContentDownloaded;
@@ -55,7 +50,7 @@ typedef struct {
   UINTN                   LastReportedNbOfBytes;
   UINTN                   BufferSize;
   UINTN                   Status;
-  UINTN                   Flags;
+  EFI_HTTP_METHOD         HttpMethod;
   UINT8                   *Buffer;
   CHAR16                  *ServerAddrAndProto;
   CHAR16                  *Uri;
@@ -63,6 +58,8 @@ typedef struct {
   EFI_HTTP_TOKEN          RequestToken;
   EFI_HTTP_PROTOCOL       *Http;
   EFI_HTTP_CONFIG_DATA    HttpConfigData;
+  UINTN                   DownloadBufferSize;
+  UINT8                   *DownloadBuffer;
 } HTTP_DOWNLOAD_CONTEXT;
 
 /**
@@ -87,13 +84,13 @@ typedef struct {
 EFI_STATUS
 EFIAPI
 RunHttp (
-  IN  CHAR16  *DownloadUrl,
-  IN  CHAR16  *NicNameIn,        OPTIONAL
-  IN  CHAR16  *LocalPortIn,      OPTIONAL
-  IN  UINTN   BufferSizeIn,      OPTIONAL
-  IN  UINT32  TimeOutMillisecIn, OPTIONAL
-  OUT CHAR8   **DownloadedBuffer,
-  OUT UINTN   *DownloadedBufferSize
+  IN  CHAR16    *DownloadUrl,
+  IN  CHAR16    *NicNameIn,        OPTIONAL
+  IN  CHAR16    *LocalPortIn,      OPTIONAL
+  IN  UINTN     BufferSizeIn,      OPTIONAL
+  IN  UINT32    TimeOutMillisecIn, OPTIONAL
+  IN OUT UINTN  *DownloadBufferSize,
+  OUT UINT8     *DownloadBuffer
   );
 
 #endif // _HTTP_DOWNLOAD_LIB_HTTP_H_

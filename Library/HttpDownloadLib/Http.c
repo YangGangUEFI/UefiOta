@@ -143,9 +143,6 @@ STATIC BOOLEAN  gResponseCallbackComplete = FALSE;
 
 STATIC BOOLEAN  gHttpError;
 
-CHAR8           *mDownloadedBuffer = NULL;
-UINTN           mDownloadedBufferSize = 0;
-
 //
 // Functions declarations.
 //
@@ -466,13 +463,13 @@ EfiTimeToEpoch (
 EFI_STATUS
 EFIAPI
 RunHttp (
-  IN  CHAR16  *DownloadUrl,
-  IN  CHAR16  *NicNameIn,        OPTIONAL
-  IN  CHAR16  *LocalPortIn,      OPTIONAL
-  IN  UINTN   BufferSizeIn,      OPTIONAL
-  IN  UINT32  TimeOutMillisecIn, OPTIONAL
-  OUT CHAR8   **DownloadedBuffer,
-  OUT UINTN   *DownloadedBufferSize
+  IN  CHAR16    *DownloadUrl,
+  IN  CHAR16    *NicNameIn,        OPTIONAL
+  IN  CHAR16    *LocalPortIn,      OPTIONAL
+  IN  UINTN     BufferSizeIn,      OPTIONAL
+  IN  UINT32    TimeOutMillisecIn, OPTIONAL
+  IN OUT UINTN  *DownloadBufferSize,
+  OUT UINT8     *DownloadBuffer
   )
 {
   EFI_STATUS               Status;
@@ -496,9 +493,6 @@ RunHttp (
   NicFound       = FALSE;
   Handles        = NULL;
 
-  //
-  // Initialize the Shell library (we must be in non-auto-init...).
-  //
   gHttpError  = FALSE;
 
   ZeroMem (&Context, sizeof (Context));
@@ -621,7 +615,13 @@ RunHttp (
 
   Status = EFI_NOT_FOUND;
 
-  Context.Flags = 0; // DL_FLAG_TIME DL_FLAG_KEEP_BAD in shell http
+  Context.DownloadBufferSize = *DownloadBufferSize;
+  Context.DownloadBuffer = DownloadBuffer;
+  if (*DownloadBufferSize == 0 && DownloadBuffer == NULL) {
+    Context.HttpMethod = HttpMethodHead;
+  } else {
+    Context.HttpMethod = HttpMethodGet;
+  }
 
   for (NicNumber = 0;
        (NicNumber < HandleCount) && (Status != EFI_SUCCESS);
@@ -631,7 +631,7 @@ RunHttp (
 
     Status = GetNicName (ControllerHandle, NicNumber, NicName);
     if (EFI_ERROR (Status)) {
-      DEBUG ((DEBUG_WARN, "Failed to get the name of the network interface card number %d - %r", NicNumber, Status));
+      DEBUG ((DEBUG_WARN, "Failed to get the name of the network interface card number %d - %r\n", NicNumber, Status));
       continue;
     }
 
@@ -647,12 +647,9 @@ RunHttp (
     Status = DownloadFile (&Context, ControllerHandle, NicName);
 
     if (EFI_ERROR (Status)) {
-      DEBUG ((DEBUG_ERROR, "Unable to download the file %s on %s - %r", RemoteFilePath, NicName, Status));
-      //
-      // If a user aborted the operation,
-      // do not try another controller.
-      //
-      if (Status == EFI_ABORTED) {
+      DEBUG ((DEBUG_ERROR, "Unable to download the file %s on %s - %r\n", RemoteFilePath, NicName, Status));
+      if (Status == EFI_BUFFER_TOO_SMALL) {
+        *DownloadBufferSize = Context.DownloadBufferSize;
         goto Error;
       }
     }
@@ -667,18 +664,12 @@ RunHttp (
   }
 
   if ((UserNicName != NULL) && (!NicFound)) {
-    DEBUG ((DEBUG_INFO, "Network Interface Card %s not found.", UserNicName));
+    DEBUG ((DEBUG_INFO, "Network Interface Card %s not found.\n", UserNicName));
   }
 
   if (!EFI_ERROR (Status)) {
-    DEBUG ((DEBUG_INFO, "DownloadedBufferSize: 0x%x\n", mDownloadedBufferSize));
-    if (mDownloadedBuffer != NULL && mDownloadedBufferSize) {
-      *DownloadedBuffer = AllocateZeroPool (mDownloadedBufferSize);
-      CopyMem (*DownloadedBuffer, mDownloadedBuffer, mDownloadedBufferSize);
-      *DownloadedBufferSize = mDownloadedBufferSize;
-      LIB_FREE_NON_NULL (mDownloadedBuffer);
-      mDownloadedBufferSize = 0;
-    }
+    DEBUG ((DEBUG_INFO, "DownloadedBufferSize: 0x%x\n", Context.ContentDownloaded));
+    *DownloadBufferSize = Context.ContentDownloaded;
   }
 
 Error:
@@ -686,7 +677,7 @@ Error:
   LIB_FREE_NON_NULL (Context.ServerAddrAndProto);
   LIB_FREE_NON_NULL (Context.Uri);
 
-  return Status & ~MAX_BIT;
+  return Status;
 }
 
 
@@ -1014,7 +1005,7 @@ SendRequest (
   RequestHeader[HdrAgent].FieldValue = USER_AGENT_HDR;
   RequestMessage.HeaderCount         = HdrMax;
 
-  RequestData.Method = HttpMethodGet;
+  RequestData.Method = Context->HttpMethod;
   RequestData.Url    = DownloadUrl;
 
   RequestMessage.Data.Request = &RequestData;
@@ -1088,15 +1079,19 @@ SavePortion (
   LastStep = 0;
   Step     = 0;
 
-  mDownloadedBuffer = ReallocatePool (mDownloadedBufferSize, mDownloadedBufferSize+DownloadLen, mDownloadedBuffer);
-  CopyMem (mDownloadedBuffer+mDownloadedBufferSize, Buffer, DownloadLen);
-  mDownloadedBufferSize += DownloadLen;
+  if (Context->DownloadBufferSize > Context->ContentDownloaded) {
+    CopyMem (
+      Context->DownloadBuffer + Context->ContentDownloaded,
+      Buffer,
+      MIN (DownloadLen, Context->DownloadBufferSize - Context->ContentDownloaded)
+      );
+  }
 
   if (Context->ContentDownloaded == 0) {
     // DEBUG ((DEBUG_INFO, "%s       0 Kb\n", HTTP_PROGR_FRAME));
   }
 
-  Context->ContentDownloaded += DownloadLen;
+  Context->ContentDownloaded += MIN (DownloadLen, Context->DownloadBufferSize - Context->ContentDownloaded);
   NbOfKb                      = Context->ContentDownloaded >> 10;
 
   Progress[0] = L'\0';
@@ -1387,12 +1382,8 @@ GetResponse (
   EFI_HTTP_HEADER         *Header;
   EFI_STATUS              Status;
   VOID                    *MsgParser;
-  EFI_TIME                StartTime;
-  EFI_TIME                EndTime;
   CONST CHAR16            *Desc;
-  UINTN                   ElapsedSeconds;
   BOOLEAN                 IsTrunked;
-  BOOLEAN                 CanMeasureTime;
 
   ZeroMem (&ResponseData, sizeof (ResponseData));
   ZeroMem (&ResponseMessage, sizeof (ResponseMessage));
@@ -1409,22 +1400,17 @@ GetResponse (
   ResponseData.StatusCode        = HTTP_STATUS_UNSUPPORTED_STATUS;
   ResponseMessage.Data.Response  = &ResponseData;
   Context->ResponseToken.Event   = NULL;
-  CanMeasureTime                 = FALSE;
-  if (Context->Flags & DL_FLAG_TIME) {
-    ZeroMem (&StartTime, sizeof (StartTime));
-    CanMeasureTime = !EFI_ERROR (gRT->GetTime (&StartTime, NULL));
-  }
 
   do {
     LIB_FREE_NON_NULL (ResponseMessage.Headers);
     ResponseMessage.HeaderCount = 0;
     gResponseCallbackComplete   = FALSE;
-    ResponseMessage.BodyLength  = Context->BufferSize;
 
-    // if (ShellGetExecutionBreakFlag ()) {
-    //   Status = EFI_ABORTED;
-    //   break;
-    // }
+    if (Context->HttpMethod == HttpMethodHead) {
+      ResponseMessage.BodyLength  = 0;
+    } else {
+      ResponseMessage.BodyLength  = Context->BufferSize;
+    }
 
     if (!Context->ContentDownloaded && !Context->ResponseToken.Event) {
       Status = gBS->CreateEvent (
@@ -1505,40 +1491,51 @@ GetResponse (
         }
       }
 
-      //
-      // If it is a trunked message, rely on the parser.
-      //
-      Header = HttpFindHeader (
-                 ResponseMessage.HeaderCount,
-                 ResponseMessage.Headers,
-                 "Transfer-Encoding"
-                 );
-      IsTrunked = (Header && !AsciiStrCmp (Header->FieldValue, "chunked"));
-
-      HttpGetEntityLength (MsgParser, &Context->ContentLength);
-
-      if (  (ResponseData.StatusCode >= HTTP_STATUS_400_BAD_REQUEST)
-         && (ResponseData.StatusCode != HTTP_STATUS_308_PERMANENT_REDIRECT))
-      {
+      if (Context->HttpMethod == HttpMethodGet) {
         //
-        // Server reported an error via Response code.
-        // Collect the body if any.
+        // If it is a trunked message, rely on the parser.
         //
-        if (!gHttpError) {
-          gHttpError = TRUE;
+        Header = HttpFindHeader (
+                   ResponseMessage.HeaderCount,
+                   ResponseMessage.Headers,
+                   "Transfer-Encoding"
+                   );
+        IsTrunked = (Header && !AsciiStrCmp (Header->FieldValue, "chunked"));
 
-          Desc = ErrStatusDesc[ResponseData.StatusCode -
-                               HTTP_STATUS_400_BAD_REQUEST];
-          DEBUG ((DEBUG_WARN, "%s reports '%s' for %s\n", Context->ServerAddrAndProto, Desc, Context->Uri));
+        HttpGetEntityLength (MsgParser, &Context->ContentLength);
 
+        if (  (ResponseData.StatusCode >= HTTP_STATUS_400_BAD_REQUEST)
+           && (ResponseData.StatusCode != HTTP_STATUS_308_PERMANENT_REDIRECT))
+        {
           //
-          // This gives an RFC HTTP error.
+          // Server reported an error via Response code.
+          // Collect the body if any.
           //
-          CHAR16  DescNum[4];
-          CopyMem (DescNum, Desc, 3 * sizeof (CHAR16));
-          DescNum[3] = '\0';
-          Context->Status = StrDecimalToUintn (DescNum);
-          Status          = ENCODE_ERROR (Context->Status);
+          if (!gHttpError) {
+            gHttpError = TRUE;
+
+            Desc = ErrStatusDesc[ResponseData.StatusCode -
+                                 HTTP_STATUS_400_BAD_REQUEST];
+            DEBUG ((DEBUG_WARN, "%s reports '%s' for %s\n", Context->ServerAddrAndProto, Desc, Context->Uri));
+
+            //
+            // This gives an RFC HTTP error.
+            //
+            CHAR16  DescNum[4];
+            CopyMem (DescNum, Desc, 3 * sizeof (CHAR16));
+            DescNum[3] = '\0';
+            Context->Status = StrDecimalToUintn (DescNum);
+            Status          = ENCODE_ERROR (Context->Status);
+          }
+        }
+      } else {
+        HttpGetEntityLength (MsgParser, &Context->ContentLength);
+
+        if (Context->DownloadBufferSize < Context->ContentLength) {
+          Context->DownloadBufferSize = Context->ContentLength;
+          Status = EFI_BUFFER_TOO_SMALL;
+        } else {
+          Status = EFI_SUCCESS;
         }
       }
     }
@@ -1556,20 +1553,6 @@ GetResponse (
   } while (  !HttpIsMessageComplete (MsgParser)
           && !EFI_ERROR (Status)
           && ResponseMessage.BodyLength);
-
-  if (  (Context->Status != REQ_NEED_REPEAT)
-     && (Status == EFI_SUCCESS)
-     && CanMeasureTime)
-  {
-    if (!EFI_ERROR (gRT->GetTime (&EndTime, NULL))) {
-      ElapsedSeconds = EfiTimeToEpoch (&EndTime) - EfiTimeToEpoch (&StartTime);
-      DEBUG ((DEBUG_INFO,
-        ",%a%Lus\n",
-        ElapsedSeconds ? " " : " < ",
-        ElapsedSeconds > 1 ? (UINT64)ElapsedSeconds : 1
-        ));
-    }
-  }
 
   LIB_FREE_NON_NULL (MsgParser);
   if (Context->ResponseToken.Event) {
