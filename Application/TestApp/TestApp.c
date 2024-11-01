@@ -59,7 +59,7 @@ BiosUpdateCheckHttp()
   //
   Status = HttpDownloadFile (L"http://192.168.10.23:5000/update", &DownloadSize, DownloadBuffer, NULL);
   if (Status == EFI_BUFFER_TOO_SMALL) {
-    DownloadBuffer = AllocateZeroPool (DownloadSize);
+    DownloadBuffer = AllocateZeroPool (DownloadSize + 1);
     Status = HttpDownloadFile (L"http://192.168.10.23:5000/update", &DownloadSize, DownloadBuffer, NULL);
   }
   if (!EFI_ERROR(Status)) {
