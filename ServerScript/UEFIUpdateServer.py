@@ -207,6 +207,21 @@ HTML = """
 """
 
 class RequestHandler(http.server.SimpleHTTPRequestHandler):
+    def do_HEAD(self):
+        if self.path == '/update':
+            if published_data['is_published']:
+                response = {
+                    "message": f"New BIOS version available: {published_data['version']}",
+                    "image_url": f"http://{LOCAL_IP}:{PORT}/BIN/{os.path.basename(published_data['file_path'])}"
+                }
+                self.send_response(200)
+                self.send_header('Content-type', 'application/json')
+                self.send_header('Content-Length', str(len(json.dumps(response).encode('utf-8'))))
+                self.end_headers()
+            else:
+                super().do_HEAD()
+        else:
+            super().do_HEAD()
     def do_GET(self):
         if self.path == '/':
             self.send_response(200)
@@ -221,6 +236,7 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
                 }
                 self.send_response(200)
                 self.send_header('Content-type', 'application/json')
+                self.send_header('Content-Length', str(len(json.dumps(response).encode('utf-8'))))
                 self.end_headers()
                 self.wfile.write(json.dumps(response).encode())
             else:
@@ -246,7 +262,8 @@ class RequestHandler(http.server.SimpleHTTPRequestHandler):
             file_item = form['file']
             
             # 保存上传的文件
-            file_path = os.path.join(os.getcwd(), "BIN", file_item.filename)
+            file_path = os.path.join(os.getcwd(), 'BIN', file_item.filename)
+            os.makedirs(os.path.join(os.getcwd(), 'BIN'), exist_ok=True)
             with open(file_path, 'wb') as f:
                 f.write(file_item.file.read())
 
