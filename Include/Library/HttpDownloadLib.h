@@ -14,8 +14,8 @@ EFI_STATUS
 EFIAPI
 HttpDownloadFile (
   IN  CHAR16                           *Url,
-  OUT CHAR8                            **ResponseBuffer,
-  OUT UINTN                            *ResponseSize,
+  IN OUT UINTN                         *BufferSize,
+  IN     VOID                          *Buffer          OPTIONAL,
   IN  HTTP_DOWNLOAD_PROGRESS_CALLBACK  ProgressCallback OPTIONAL
   );
 

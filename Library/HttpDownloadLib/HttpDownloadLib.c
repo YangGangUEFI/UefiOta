@@ -16,17 +16,26 @@ EFI_STATUS
 EFIAPI
 HttpDownloadFile (
   IN  CHAR16                           *Url,
-  OUT CHAR8                            **ResponseBuffer,
-  OUT UINTN                            *ResponseSize,
+  IN OUT UINTN                         *BufferSize,
+  IN     VOID                          *Buffer          OPTIONAL,
   IN  HTTP_DOWNLOAD_PROGRESS_CALLBACK  ProgressCallback OPTIONAL
   )
 {
   EFI_STATUS  Status;
+
+  if ((*BufferSize != 0) && (Buffer == NULL)) {
+    return EFI_INVALID_PARAMETER;
+  }
+
   if (ProgressCallback != NULL) {
     gHttpDownloadProgressCallback = ProgressCallback;
   }
-  Status = RunHttp (Url, NULL, NULL, 0, 0, ResponseBuffer, ResponseSize);
+
+  Status = RunHttp (Url, NULL, NULL, 0, 0, BufferSize, Buffer);
   DEBUG ((DEBUG_INFO, "HttpDownloadFile() RunHttp return %r\n", Status));
+  if (Status == EFI_BUFFER_TOO_SMALL) {
+    DEBUG ((DEBUG_INFO, "HttpDownloadFile() need 0x%x bytes buffer\n", *BufferSize));
+  }
   return Status;
 }
 

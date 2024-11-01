@@ -46,7 +46,6 @@ BiosUpdateCheckHttp()
   CHAR8          *BiosBinLinkStr;
   UINTN          StringSize1, StringSize2;
   CHAR16         *BiosLink, *NewMessage;
-  CHAR8          *TempBuffer;
   EFI_INPUT_KEY  Key;
 
   //
@@ -58,30 +57,32 @@ BiosUpdateCheckHttp()
   //   "image_url": "http://192.168.10.23:5000/BIOS.bin"
   // }
   //
-  Status = HttpDownloadFile (L"http://192.168.10.23:5000/update", &DownloadBuffer, &DownloadSize, NULL);
-  if (!EFI_ERROR(Status) && DownloadBuffer != NULL) {
-    TempBuffer = AllocateZeroPool (DownloadSize + 1);
-    CopyMem (TempBuffer, DownloadBuffer, DownloadSize);
-    FreePool (DownloadBuffer);
-    DownloadBuffer = NULL;
-    DEBUG ((DEBUG_INFO, "%a\n", TempBuffer));
+  Status = HttpDownloadFile (L"http://192.168.10.23:5000/update", &DownloadSize, DownloadBuffer, NULL);
+  if (Status == EFI_BUFFER_TOO_SMALL) {
+    DownloadBuffer = AllocateZeroPool (DownloadSize);
+    Status = HttpDownloadFile (L"http://192.168.10.23:5000/update", &DownloadSize, DownloadBuffer, NULL);
+  }
+  if (!EFI_ERROR(Status)) {
+    DEBUG ((DEBUG_INFO, "%a - 0x%x\n", DownloadBuffer, DownloadSize));
 
-    SearchResult = AsciiStrStr (TempBuffer, ", ");
+    SearchResult = AsciiStrStr (DownloadBuffer, ", ");
     if (SearchResult != NULL) {
       StringSize1 = DownloadSize - 13 - AsciiStrLen (SearchResult) - 1;
       MessageStr = AllocateZeroPool (StringSize1 + 1);
-      CopyMem (MessageStr, TempBuffer+13, StringSize1);
+      CopyMem (MessageStr, DownloadBuffer+13, StringSize1);
 
       DEBUG ((DEBUG_INFO, "%a\n", MessageStr));
 
       StringSize2 = DownloadSize - 13 - StringSize1 - 17 - 2;
       BiosBinLinkStr = AllocateZeroPool (StringSize2 + 1);
-      CopyMem (BiosBinLinkStr, TempBuffer+13+StringSize1+17, StringSize2);
+      CopyMem (BiosBinLinkStr, DownloadBuffer+13+StringSize1+17, StringSize2);
       DEBUG ((DEBUG_INFO, "%a\n", BiosBinLinkStr));
 
-      if (TempBuffer != NULL) FreePool (TempBuffer);
-      TempBuffer = NULL;
-      DownloadSize = 0;
+      if (DownloadBuffer != NULL) {
+        FreePool (DownloadBuffer);
+        DownloadBuffer = NULL;
+        DownloadSize = 0;
+      }
 
       BiosLink = AllocateZeroPool ((AsciiStrLen (BiosBinLinkStr) + 1) * sizeof (CHAR16));
       AsciiStrToUnicodeStrS (BiosBinLinkStr, BiosLink, (AsciiStrLen (BiosBinLinkStr) + 1) * sizeof (CHAR16));
@@ -106,17 +107,27 @@ BiosUpdateCheckHttp()
       FreePool (NewMessage);
 
       if (Key.UnicodeChar == CHAR_CARRIAGE_RETURN) {
-        Status = HttpDownloadFile (BiosLink, &DownloadBuffer, &DownloadSize, HttpDownloadFileProgress);
-        FreePool (BiosLink);
-        DEBUG ((DEBUG_INFO, "DownloadSize: 0x%x\n", DownloadSize));
+        Status = HttpDownloadFile (BiosLink, &DownloadSize, DownloadBuffer, NULL);
+        if (Status == EFI_BUFFER_TOO_SMALL) {
+          DownloadBuffer = AllocateZeroPool (DownloadSize);
+          Status = HttpDownloadFile (BiosLink, &DownloadSize, DownloadBuffer, HttpDownloadFileProgress);
+          FreePool (BiosLink);
+          DEBUG ((DEBUG_INFO, "DownloadSize: 0x%x\n", DownloadSize));
+        }
+
+        if (EFI_ERROR (Status)) {
+          HttpDownloadFileProgress (L"Download BIOS error");
+        }
 
         //
         // Call BIOS Update API!!!
         //
 
-        if (DownloadBuffer != NULL) FreePool (DownloadBuffer);
-        DownloadBuffer = NULL;
-        DownloadSize = 0;
+        if (DownloadBuffer != NULL) {
+          FreePool (DownloadBuffer);
+          DownloadBuffer = NULL;
+          DownloadSize = 0;
+        }
       } else {
         return;
       }
