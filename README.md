@@ -40,11 +40,15 @@ Add one button in .VFR like:
 
 Call `BiosUpdateCheckHttp`(TestApp) in HiiConfigAccess.Callback. (You need to add some code to call UEFI BIOS Update function)
 
-![Vfr1](./Vfr/Vfr1.png)
+![qemu](./Vfr/qemu.gif)
 
-![Vfr2](./Vfr/Vfr2.png)
+### Notes
+1. The firmware needs to include the UEFI network stack module
+2. At lease one NIC 
+3. Make sure the driver is connected before calling `HttpDownloadFile()` API
+4. Connect the network cable and ensure that the http server is normal
 
 ### TODO
-- [ ] `HttpDownloadLib` download speed
+- [x] `HttpDownloadLib` download speed
 - [ ] HTTPS?
 - [ ] JSON Parser?
