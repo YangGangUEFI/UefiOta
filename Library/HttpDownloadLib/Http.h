@@ -24,9 +24,11 @@
 #include <Library/UefiBootServicesTableLib.h>
 #include <Library/UefiLib.h>
 #include <Library/UefiRuntimeServicesTableLib.h>
+#include <Library/NetLib.h>
 
 #include <Protocol/HttpUtilities.h>
 #include <Protocol/ServiceBinding.h>
+#include <Protocol/Ip4Config2.h>
 
 #include <Library/HttpDownloadLib.h>
 

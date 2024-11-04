@@ -214,6 +214,12 @@ GetNicName (
   OUT  CHAR16      *NicName
   );
 
+STATIC
+EFI_STATUS
+NicDhcp4 (
+  IN   EFI_HANDLE  ControllerHandle
+  );
+
 /**
   Create a child for the service identified by its service binding protocol GUID
   and get from the child the interface of the protocol identified by its GUID.
@@ -635,6 +641,8 @@ RunHttp (
       continue;
     }
 
+    Status = NicDhcp4 (ControllerHandle);
+
     if (UserNicName != NULL) {
       if (StrCmp (NicName, UserNicName) != 0) {
         Status = EFI_NOT_FOUND;
@@ -748,6 +756,96 @@ Error:
       );
   }
 
+  return Status;
+}
+
+STATIC
+EFI_STATUS
+NicDhcp4 (
+  IN   EFI_HANDLE  ControllerHandle
+  )
+{
+  EFI_STATUS                      Status;
+  EFI_IP4_CONFIG2_PROTOCOL        *Ip4Config2;
+  EFI_IP4_CONFIG2_POLICY          Policy;
+  UINTN                           DataSize;
+  EFI_IP4_CONFIG2_INTERFACE_INFO  *Ip4Info;
+
+  Status = gBS->HandleProtocol (ControllerHandle, &gEfiIp4Config2ProtocolGuid, &Ip4Config2);
+  if (EFI_ERROR (Status)) {
+    goto Error;
+  }
+
+  //
+  // Get the interface info.
+  //
+  DataSize = 0;
+  Status   = Ip4Config2->GetData (
+                           Ip4Config2,
+                           Ip4Config2DataTypeInterfaceInfo,
+                           &DataSize,
+                           NULL
+                           );
+  if (Status != EFI_BUFFER_TOO_SMALL) {
+    goto Error;
+  }
+
+  Ip4Info = AllocateZeroPool (DataSize);
+  if (Ip4Info == NULL) {
+    Status = EFI_OUT_OF_RESOURCES;
+    goto Error;
+  }
+
+  Status = Ip4Config2->GetData (
+                         Ip4Config2,
+                         Ip4Config2DataTypeInterfaceInfo,
+                         &DataSize,
+                         Ip4Info
+                         );
+  if (EFI_ERROR (Status)) {
+    goto Error;
+  }
+
+  DataSize = sizeof (EFI_IP4_CONFIG2_POLICY);
+  Status   = Ip4Config2->GetData (
+                           Ip4Config2,
+                           Ip4Config2DataTypePolicy,
+                           &DataSize,
+                           &Policy
+                           );
+  if (EFI_ERROR (Status)) {
+    goto Error;
+  }
+
+  DEBUG ((
+    DEBUG_INFO,
+    "IP=%d.%d.%d.%d Policy=%d\n",
+    Ip4Info->StationAddress.Addr[0],
+    Ip4Info->StationAddress.Addr[1],
+    Ip4Info->StationAddress.Addr[2],
+    Ip4Info->StationAddress.Addr[3],
+    Policy
+    ));
+
+  if (EFI_IP4_EQUAL (&Ip4Info->StationAddress, &mZeroIp4Addr) && Policy != Ip4Config2PolicyDhcp) {
+    Policy = Ip4Config2PolicyDhcp;
+    Status = Ip4Config2->SetData (
+                           Ip4Config2,
+                           Ip4Config2DataTypePolicy,
+                           sizeof (EFI_IP4_CONFIG2_POLICY),
+                           &Policy
+                           );
+    if (EFI_ERROR (Status)) {
+      return Status;
+    }
+  }
+
+  Status = EFI_SUCCESS;
+
+Error:
+  if (Ip4Info != NULL) {
+    FreePool (Ip4Info);
+  }
   return Status;
 }
 
