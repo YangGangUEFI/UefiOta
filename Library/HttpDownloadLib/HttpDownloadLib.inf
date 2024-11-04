@@ -41,8 +41,10 @@
   UefiBootServicesTableLib
   UefiLib
   UefiRuntimeServicesTableLib
+  NetLib
 
 [Protocols]
   gEfiHttpProtocolGuid                         ## CONSUMES
   gEfiHttpServiceBindingProtocolGuid           ## CONSUMES
   gEfiManagedNetworkServiceBindingProtocolGuid   ## CONSUMES
+  gEfiIp4Config2ProtocolGuid                     ## CONSUMES
