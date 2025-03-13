@@ -1,6 +1,15 @@
 # UefiOta
 A minimal implementation of UEFI OTA.
 
+- [UefiOta](#uefiota)
+    - [UEFIUpdateServer.py](#uefiupdateserverpy)
+      - [Usage](#usage)
+    - [HttpDownloadLib](#httpdownloadlib)
+    - [TestApp](#testapp)
+    - [UEFI BIOS SETUP](#uefi-bios-setup)
+    - [Notes](#notes)
+    - [TODO](#todo)
+
 ### [UEFIUpdateServer.py](./ServerScript/UEFIUpdateServer.py)
 Provides a minimal HTTP server as a UEFI OTA check server.
 #### Usage

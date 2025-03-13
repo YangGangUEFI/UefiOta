@@ -838,6 +838,42 @@ NicDhcp4 (
     if (EFI_ERROR (Status)) {
       return Status;
     }
+
+    gBS->Stall (2 * 1000 * 1000);
+
+    DataSize = 0;
+    Status   = Ip4Config2->GetData (
+                             Ip4Config2,
+                             Ip4Config2DataTypeInterfaceInfo,
+                             &DataSize,
+                             NULL
+                             );
+    if (Status == EFI_BUFFER_TOO_SMALL) {
+      Ip4Info = AllocateZeroPool (DataSize);
+      if (Ip4Info != NULL) {
+        Status = Ip4Config2->GetData (
+          Ip4Config2,
+          Ip4Config2DataTypeInterfaceInfo,
+          &DataSize,
+          Ip4Info
+          );
+        if (!EFI_ERROR (Status)) {
+          DataSize = sizeof (EFI_IP4_CONFIG2_POLICY);
+          Status   = Ip4Config2->GetData (
+                                   Ip4Config2,
+                                   Ip4Config2DataTypePolicy,
+                                   &DataSize,
+                                   &Policy
+                                   );
+          if (!EFI_ERROR(Status)) {
+            if (Policy == Ip4Config2PolicyDhcp && IsZeroBuffer(&Ip4Info->StationAddress.Addr[0], 4)) {
+              gBS->Stall (2 * 1000 * 1000);
+            }
+          }
+        }
+      }
+    }
+
   }
 
   Status = EFI_SUCCESS;
