@@ -770,6 +770,7 @@ NicDhcp4 (
   EFI_IP4_CONFIG2_POLICY          Policy;
   UINTN                           DataSize;
   EFI_IP4_CONFIG2_INTERFACE_INFO  *Ip4Info;
+  UINTN                           CheckDhcpSec = 10;
 
   Status = gBS->HandleProtocol (ControllerHandle, &gEfiIp4Config2ProtocolGuid, &Ip4Config2);
   if (EFI_ERROR (Status)) {
@@ -839,8 +840,6 @@ NicDhcp4 (
       return Status;
     }
 
-    gBS->Stall (2 * 1000 * 1000);
-
     DataSize = 0;
     Status   = Ip4Config2->GetData (
                              Ip4Config2,
@@ -849,6 +848,9 @@ NicDhcp4 (
                              NULL
                              );
     if (Status == EFI_BUFFER_TOO_SMALL) {
+      if (Ip4Info != NULL) {
+        FreePool (Ip4Info);
+      }
       Ip4Info = AllocateZeroPool (DataSize);
       if (Ip4Info != NULL) {
         Status = Ip4Config2->GetData (
@@ -866,8 +868,15 @@ NicDhcp4 (
                                    &Policy
                                    );
           if (!EFI_ERROR(Status)) {
-            if (Policy == Ip4Config2PolicyDhcp && IsZeroBuffer(&Ip4Info->StationAddress.Addr[0], 4)) {
-              gBS->Stall (2 * 1000 * 1000);
+            while (TRUE) {
+              if (CheckDhcpSec == 0) {
+                goto Error;
+              }
+              if (Policy != Ip4Config2PolicyDhcp || EFI_IP4_EQUAL (&Ip4Info->StationAddress, &mZeroIp4Addr)) {
+                gBS->Stall (1 * 1000 * 1000);
+                DEBUG ((DEBUG_INFO, "Waiting DHCP %dS\n", CheckDhcpSec));
+                CheckDhcpSec--;
+              }
             }
           }
         }

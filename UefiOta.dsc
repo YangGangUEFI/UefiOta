@@ -123,7 +123,13 @@
   HttpDownloadLib|UefiOta/Library/HttpDownloadLib/HttpDownloadLib.inf
 
 [PcdsPatchableInModule.common]
+!if $(TARGET) == DEBUG
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x0F
   gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x80280046
+!else
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x0
+  gEfiMdePkgTokenSpaceGuid.PcdDebugPrintErrorLevel|0x0
+!endif
 
 [Components]
 
