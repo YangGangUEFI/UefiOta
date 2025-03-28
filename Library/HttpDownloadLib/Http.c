@@ -828,7 +828,7 @@ NicDhcp4 (
     Policy
     ));
 
-  if (EFI_IP4_EQUAL (&Ip4Info->StationAddress, &mZeroIp4Addr) && Policy != Ip4Config2PolicyDhcp) {
+  if (EFI_IP4_EQUAL (&Ip4Info->StationAddress, &mZeroIp4Addr) || Policy != Ip4Config2PolicyDhcp) {
     Policy = Ip4Config2PolicyDhcp;
     Status = Ip4Config2->SetData (
                            Ip4Config2,
@@ -840,49 +840,59 @@ NicDhcp4 (
       return Status;
     }
 
-    DataSize = 0;
-    Status   = Ip4Config2->GetData (
-                             Ip4Config2,
-                             Ip4Config2DataTypeInterfaceInfo,
-                             &DataSize,
-                             NULL
-                             );
-    if (Status == EFI_BUFFER_TOO_SMALL) {
-      if (Ip4Info != NULL) {
-        FreePool (Ip4Info);
+    while (TRUE) {
+      if (CheckDhcpSec == 0) {
+        goto Error;
       }
-      Ip4Info = AllocateZeroPool (DataSize);
-      if (Ip4Info != NULL) {
-        Status = Ip4Config2->GetData (
-          Ip4Config2,
-          Ip4Config2DataTypeInterfaceInfo,
-          &DataSize,
-          Ip4Info
-          );
-        if (!EFI_ERROR (Status)) {
-          DataSize = sizeof (EFI_IP4_CONFIG2_POLICY);
-          Status   = Ip4Config2->GetData (
-                                   Ip4Config2,
-                                   Ip4Config2DataTypePolicy,
-                                   &DataSize,
-                                   &Policy
-                                   );
-          if (!EFI_ERROR(Status)) {
-            while (TRUE) {
-              if (CheckDhcpSec == 0) {
-                goto Error;
-              }
+      DataSize = 0;
+      Status   = Ip4Config2->GetData (
+                               Ip4Config2,
+                               Ip4Config2DataTypeInterfaceInfo,
+                               &DataSize,
+                               NULL
+                               );
+      if (Status == EFI_BUFFER_TOO_SMALL) {
+        if (Ip4Info != NULL) {
+          FreePool (Ip4Info);
+        }
+        Ip4Info = AllocateZeroPool (DataSize);
+        if (Ip4Info != NULL) {
+          Status = Ip4Config2->GetData (
+            Ip4Config2,
+            Ip4Config2DataTypeInterfaceInfo,
+            &DataSize,
+            Ip4Info
+            );
+          if (!EFI_ERROR (Status)) {
+            DataSize = sizeof (EFI_IP4_CONFIG2_POLICY);
+            Status   = Ip4Config2->GetData (
+                                     Ip4Config2,
+                                     Ip4Config2DataTypePolicy,
+                                     &DataSize,
+                                     &Policy
+                                     );
+            if (!EFI_ERROR(Status)) {
+              DEBUG ((
+                DEBUG_INFO,
+                "IP=%d.%d.%d.%d Policy=%d\n",
+                Ip4Info->StationAddress.Addr[0],
+                Ip4Info->StationAddress.Addr[1],
+                Ip4Info->StationAddress.Addr[2],
+                Ip4Info->StationAddress.Addr[3],
+                Policy
+                ));
               if (Policy != Ip4Config2PolicyDhcp || EFI_IP4_EQUAL (&Ip4Info->StationAddress, &mZeroIp4Addr)) {
                 gBS->Stall (1 * 1000 * 1000);
                 DEBUG ((DEBUG_INFO, "Waiting DHCP %dS\n", CheckDhcpSec));
                 CheckDhcpSec--;
+              } else {
+                CheckDhcpSec = 0;
               }
             }
           }
         }
       }
     }
-
   }
 
   Status = EFI_SUCCESS;
